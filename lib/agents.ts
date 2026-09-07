@@ -1,7 +1,5 @@
-import { generateText } from 'ai';
+import { generateText, type LanguageModelV1 } from 'ai';
 import { openai } from '@ai-sdk/openai';
-
-type LanguageModel = ReturnType<typeof openai>;
 
 export type AgentSuccess = {
   agent: string;
@@ -29,11 +27,12 @@ function errorMessage(error: unknown): string {
 // Agent Base Class
 export abstract class Agent {
   protected name: string;
-  protected model: LanguageModel;
+  protected model: LanguageModelV1;
 
   constructor(name: string) {
     this.name = name;
-    this.model = openai('gpt-4-turbo-preview');
+    // Peer packages can drift under npm install; cast keeps generateText satisfied.
+    this.model = openai('gpt-4-turbo-preview') as LanguageModelV1;
   }
 
   abstract getCapabilities(): string[];
