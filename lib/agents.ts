@@ -1,12 +1,35 @@
-import { generateText, tool } from 'ai';
+import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { z } from 'zod';
+
+type LanguageModel = ReturnType<typeof openai>;
+
+export type AgentSuccess = {
+  agent: string;
+  task: string;
+  result: string;
+  steps: number;
+  success: true;
+};
+
+export type AgentFailure = {
+  agent: string;
+  task: string;
+  error: string;
+  success: false;
+};
+
+export type AgentResult = AgentSuccess | AgentFailure;
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Unknown error';
+}
 
 // Agent Base Class
 export abstract class Agent {
   protected name: string;
-  protected model: any;
-  protected tools: any[] = [];
+  protected model: LanguageModel;
 
   constructor(name: string) {
     this.name = name;
@@ -16,7 +39,7 @@ export abstract class Agent {
   abstract getCapabilities(): string[];
   abstract getTaskTypes(): string[];
 
-  async execute(task: string, context?: any) {
+  async execute(task: string): Promise<AgentResult> {
     try {
       const result = await generateText({
         model: this.model,
@@ -24,7 +47,6 @@ export abstract class Agent {
           { role: 'system', content: this.getSystemPrompt() },
           { role: 'user', content: task },
         ],
-        tools: this.tools.length > 0 ? this.tools.reduce((acc, t) => ({ ...acc, [t.name]: t }), {}) : undefined,
         maxSteps: 5,
       });
 
@@ -35,11 +57,11 @@ export abstract class Agent {
         steps: result.toolCalls?.length || 0,
         success: true,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         agent: this.name,
         task,
-        error: error?.message || 'Unknown error',
+        error: errorMessage(error),
         success: false,
       };
     }
@@ -65,8 +87,8 @@ export class ResearchAgent extends Agent {
   }
 
   protected getSystemPrompt(): string {
-    return `You are a Research Agent. Your job is to gather information, verify sources, 
-    and synthesize comprehensive reports. Always cite your sources and provide evidence.`;
+    return `You are a Research Agent. Your job is to gather information, verify sources,
+and synthesize comprehensive reports. Always cite your sources and provide evidence.`;
   }
 }
 
@@ -86,7 +108,7 @@ export class CodingAgent extends Agent {
 
   protected getSystemPrompt(): string {
     return `You are a Coding Agent. Your job is to write, test, and debug code.
-    Always follow best practices, add error handling, and include tests.`;
+Always follow best practices, add error handling, and include tests.`;
   }
 }
 
@@ -94,33 +116,39 @@ export class CodingAgent extends Agent {
 export class AgentOrchestrator {
   private agents: Map<string, Agent> = new Map();
 
-  registerAgent(agent: Agent) {
+  registerAgent(agent: Agent): void {
     this.agents.set(agent.constructor.name, agent);
   }
 
-  async routeTask(task: string): Promise<any> {
-    // Simple routing based on keywords
+  async routeTask(task: string): Promise<AgentResult | { error: string; success: false }> {
     const taskLower = task.toLowerCase();
-    
-    if (taskLower.includes('research') || taskLower.includes('analyze') || taskLower.includes('summarize')) {
+
+    if (
+      taskLower.includes('research') ||
+      taskLower.includes('analyze') ||
+      taskLower.includes('summarize')
+    ) {
       const agent = this.agents.get('ResearchAgent');
       if (agent) return agent.execute(task);
     }
-    
-    if (taskLower.includes('code') || taskLower.includes('build') || taskLower.includes('fix')) {
+
+    if (
+      taskLower.includes('code') ||
+      taskLower.includes('build') ||
+      taskLower.includes('fix')
+    ) {
       const agent = this.agents.get('CodingAgent');
       if (agent) return agent.execute(task);
     }
 
-    // Default to first available agent
-    const firstAgent = this.agents.values().next().value;
+    const firstAgent = this.agents.values().next().value as Agent | undefined;
     if (firstAgent) return firstAgent.execute(task);
 
     return { error: 'No suitable agent found', success: false };
   }
 
-  listAgents() {
-    return Array.from(this.agents.values()).map(a => ({
+  listAgents(): Array<{ name: string; capabilities: string[]; tasks: string[] }> {
+    return Array.from(this.agents.values()).map((a) => ({
       name: a.constructor.name,
       capabilities: a.getCapabilities(),
       tasks: a.getTaskTypes(),

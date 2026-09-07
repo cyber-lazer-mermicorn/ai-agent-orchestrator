@@ -1,2 +1,4 @@
-# Default owner for everything
-* @cyber-lazer-mermicorn
+*       @cyber-lazer-mermicorn
+
+/lib/                         @cyber-lazer-mermicorn
+/.github/workflows/           @cyber-lazer-mermicorn
